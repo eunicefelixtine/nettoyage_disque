@@ -2,6 +2,8 @@ name: Docker Hub CD
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -27,17 +29,20 @@ jobs:
       - name: Compute image tags
         id: meta
         run: |
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          echo "IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/nettoyage_disque" >> "$GITHUB_OUTPUT"
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/nettoyage_disque"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "TAGS=${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            echo "TAGS=${IMAGE}:latest,${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ${{ steps.meta.outputs.IMAGE }}:latest
-            ${{ steps.meta.outputs.IMAGE }}:${{ steps.meta.outputs.VERSION }}
+          tags: ${{ steps.meta.outputs.TAGS }}
           labels: |
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
             org.opencontainers.image.revision=${{ github.sha }}
