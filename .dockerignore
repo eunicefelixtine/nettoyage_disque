@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+.git/
+.gitignore
+.github/
+
+test_dev_sweep.py
+.pytest_cache/
+README.md
+LICENSE
+Dockerfile
+.dockerignore

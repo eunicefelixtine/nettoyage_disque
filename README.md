@@ -75,6 +75,38 @@ python3 dev_sweep.py --path ~/Documents --folders --docker --yes
 | `--yes` | Saute la demande de confirmation explicite. |
 | `-h, --help` | Affiche l'aide et les options. |
 
+## Conteneurisation (Docker)
+
+### Construction de l'image
+
+```bash
+docker build -t nettoyage_disque .
+```
+
+### Image publique (Docker Hub)
+
+L'image est publiée automatiquement sur **Docker Hub** via GitHub Actions à chaque tag `v*` :
+
+```bash
+docker pull eunicefelixtine/nettoyage_disque:latest
+```
+
+> Remplace `eunicefelixtine` par ton nom d'utilisateur Docker Hub.
+
+### Analyse / nettoyage des dossiers de projets
+
+Montez le dossier hôte à analyser et indiquez son chemin **dans le conteneur** :
+
+```bash
+docker run --rm -it -v "$HOME":/home/appuser nettoyage_disque --path /home/appuser/Documents --dry-run
+```
+
+### Limites du mode conteneur
+
+- **Nettoyage Docker sur l'hôte** : l'image ne contient pas de client Docker et le binaire de l'hôte n'est pas compatible (binaire glibc vs conteneur musl). Le nettoyage du cache Docker (`--docker`) doit être exécuté directement sur l'hôte. Le conteneur est destiné à l'analyse et au nettoyage des dossiers de projets.
+- La corbeille (`send2trash`) ne fonctionne pas dans un conteneur (aucun service de corbeille) : les suppressions sont définitives, après confirmation.
+- Le conteneur tourne en utilisateur non-root (`appuser`).
+
 ## Dossiers & Indicateurs de Détection
 
 L'outil vérifie la présence d'un fichier témoin au niveau du projet avant de classer un dossier comme supprimable :
@@ -101,6 +133,8 @@ nettoyage_disque/
 ├── dev_sweep.py          # Script principal (Scanner, CLI, Nettoyeur)
 ├── test_dev_sweep.py     # Tests unitaires
 ├── requirements.txt      # Dépendances optionnelles (tqdm, send2trash)
+├── Dockerfile            # Image Docker (python:3.12-alpine, utilisateur non-root)
+├── .dockerignore
 ├── .github/workflows/    # Pipeline CI (GitHub Actions)
 │   └── ci.yml
 ├── .gitignore
