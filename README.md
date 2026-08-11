@@ -85,7 +85,7 @@ docker build -t nettoyage_disque .
 
 ### Image publique (Docker Hub)
 
-L'image est publiée automatiquement sur **Docker Hub** via GitHub Actions à chaque tag `v*` :
+L'image est publiée automatiquement sur **Docker Hub** via GitHub Actions à chaque push sur `main` (et tag `v*`), avec les tags `latest` et un tag basé sur le SHA du commit :
 
 ```bash
 docker pull eunicefelixtine/nettoyage_disque:latest
@@ -106,6 +106,66 @@ docker run --rm -it -v "$HOME":/home/appuser nettoyage_disque --path /home/appus
 - **Nettoyage Docker sur l'hôte** : l'image ne contient pas de client Docker et le binaire de l'hôte n'est pas compatible (binaire glibc vs conteneur musl). Le nettoyage du cache Docker (`--docker`) doit être exécuté directement sur l'hôte. Le conteneur est destiné à l'analyse et au nettoyage des dossiers de projets.
 - La corbeille (`send2trash`) ne fonctionne pas dans un conteneur (aucun service de corbeille) : les suppressions sont définitives, après confirmation.
 - Le conteneur tourne en utilisateur non-root (`appuser`).
+
+## Déploiement Kubernetes (ArgoCD / GitOps)
+
+Le projet est déployé sur Kubernetes via **ArgoCD** à partir des manifests du dossier `k8s/`.
+
+### Manifests (`k8s/`)
+
+| Fichier | Rôle |
+|---|---|
+| `namespace.yaml` | Namespace `nettoyage` |
+| `configmap.yaml` | Configuration : schedule, chemin à analyser, arguments (`--dry-run` par défaut) |
+| `cronjob.yaml` | CronJob `nettoyage-disque` exécuté chaque jour à 02:00 |
+
+Le CronJob monte le dossier du nœud `/tmp/nettoyage-data` dans `/data` puis lance :
+
+```bash
+python dev_sweep.py --path /data --dry-run
+```
+
+> Par défaut en **mode simulation** (`--dry-run`) : aucun fichier n'est supprimé. Pour activer le vrai nettoyage, modifiez `extra-args` dans `configmap.yaml` (`--folders --yes`) et commitez le changement.
+
+### Boucle GitOps (déploiement continu)
+
+1. `git push` sur `main` → GitHub Actions (CI + CD)
+2. Le CD construit l'image et la publie sur Docker Hub avec un tag basé sur le SHA
+3. Le workflow met à jour `k8s/cronjob.yaml` (nouveau tag image) et committe le changement
+4. ArgoCD détecte le commit et **resynchronise automatiquement** le cluster
+
+### Application ArgoCD
+
+```bash
+kubectl apply -f - <<'EOF'
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nettoyage
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/eunicefelixtine/nettoyage_disque.git
+    targetRevision: HEAD
+    path: k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nettoyage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+EOF
+```
+
+### Exécution manuelle du CronJob
+
+```bash
+# Lancer un scan maintenant (sans attendre le schedule)
+kubectl create job nettoyage-test --from=cronjob/nettoyage-disque -n nettoyage
+kubectl logs -n nettoyage -l job-name=nettoyage-test
+```
 
 ## Dossiers & Indicateurs de Détection
 
@@ -135,8 +195,13 @@ nettoyage_disque/
 ├── requirements.txt      # Dépendances optionnelles (tqdm, send2trash)
 ├── Dockerfile            # Image Docker (python:3.12-alpine, utilisateur non-root)
 ├── .dockerignore
-├── .github/workflows/    # Pipeline CI (GitHub Actions)
-│   └── ci.yml
+├── .github/workflows/    # Pipelines CI/CD (GitHub Actions)
+│   ├── ci.yml           # Tests unitaires (Python 3.9 → 3.12)
+│   └── docker-cd.yml    # Build + push image Docker Hub + mise à jour GitOps des manifests
+├── k8s/                 # Manifests Kubernetes (déployés par ArgoCD)
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   └── cronjob.yaml
 ├── .gitignore
 └── README.md
 ```
