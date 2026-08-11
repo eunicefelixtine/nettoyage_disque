@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nettoyage-disque
+  namespace: nettoyage
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: nettoyage
+              image: eunicefelixtine/nettoyage_disque:latest
+              imagePullPolicy: IfNotPresent
+              args:
+                - "--path"
+                - "$(SCAN_PATH)"
+                - "$(EXTRA_ARGS)"
+              env:
+                - name: SCAN_PATH
+                  valueFrom:
+                    configMapKeyRef:
+                      name: nettoyage-config
+                      key: scan-path
+                - name: EXTRA_ARGS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: nettoyage-config
+                      key: extra-args
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+          volumes:
+            - name: data
+              hostPath:
+                path: /tmp/nettoyage-data
+                type: DirectoryOrCreate
