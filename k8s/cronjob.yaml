@@ -16,7 +16,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: nettoyage
-              image: eunicefelixtine/nettoyage_disque:latest
+              image: eunicefelixtine/nettoyage_disque:4de7b3b3530412c109e50d8a9241718b7f24c378
               imagePullPolicy: IfNotPresent
               args:
                 - "--path"
